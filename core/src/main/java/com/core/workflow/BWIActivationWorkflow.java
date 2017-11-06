@@ -1,18 +1,3 @@
-/*
- *  Copyright 2015 Adobe Systems Incorporated
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- */
 package com.core.workflow;
 
 import java.util.Collections;
@@ -45,33 +30,23 @@ import com.day.cq.replication.ReplicationActionType;
 import com.day.cq.replication.ReplicationException;
 import com.day.cq.replication.Replicator;
 
-
 @Component
 @Service
-@Properties({
-	@Property(
-            name = "BWI Project",
-            value = "BWI Activation Workflow"
-    ),
-    @Property(
-            label = "Workflow Label",
-            name = "process.label",
-            value = "BWI Activation Workflow",
-            description = "This triggers when a page property is modified"
-    )
-})
-public class BWIActivationWorkflow implements WorkflowProcess{
-	
+@Properties({ @Property(name = "BWI Project", value = "BWI Activation Workflow"),
+		@Property(label = "Workflow Label", name = "process.label", value = "BWI Activation Workflow", description = "This triggers when a page property is modified") })
+public class BWIActivationWorkflow implements WorkflowProcess {
+
 	private static final Logger LOG = LoggerFactory.getLogger(BWIActivationWorkflow.class);
-		
+
 	@Reference
 	private Replicator replicator;
-	
+
 	@Reference
-    private ResourceResolverFactory resolverFactory;
-	
+	private ResourceResolverFactory resolverFactory;
+
 	/**
-	 * When activationProperty is not empty activation workflow will be executed and page will be activated otherwise workflow will be terminated.
+	 * When activationProperty is not empty activation workflow will be executed
+	 * and page will be activated otherwise workflow will be terminated.
 	 * 
 	 */
 	@Override
@@ -80,60 +55,86 @@ public class BWIActivationWorkflow implements WorkflowProcess{
 		LOG.info("Into BWIActivationWorkflow - execute method");
 		String path = workItem.getWorkflowData().getPayload().toString();
 		ResourceResolver resourceResolver = null;
-		//if(StringUtils.isNotBlank(path)) {
-		if(!"".equalsIgnoreCase(path)) {
+		// if(StringUtils.isNotBlank(path)) {
+		if (!"".equalsIgnoreCase(path)) {
 			Session session = workflowSession.adaptTo(Session.class);
 			try {
-				resourceResolver = getResourceResolver(session);	
-				if(null != resourceResolver) {
-					
+				resourceResolver = getResourceResolver(session);
+				if (null != resourceResolver) {
+
 					Resource resource = resourceResolver.getResource(path);
-					if(null != resource) {
-						
-						Node node = resource.adaptTo(Node.class);
-						if(null != node) {
-							if(node.hasProperty("activationProperty")) {
-								Value activationPropertyValue = node.getProperty("activationProperty").getValue();
-								
-								String activationProperty = activationPropertyValue.toString();
-								
-								
-								if(null != activationProperty && activationProperty.length() > 0) {										
-									replicator.replicate(session, ReplicationActionType.ACTIVATE,
-											path);										
-									session.save();
-									session.refresh(true);
-									
-								}else {
-									terminateWorkflow(workflowSession, workItem);
-								}
-							}						
-						}
-						
+					if (null != resource) {
+						getActiavtionProperty(workItem, workflowSession, session, path, resource);
+
 					}
 				}
 				session.save();
 				session.refresh(true);
-			}catch (RepositoryException e) {
+			} catch (RepositoryException e) {
 				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}catch (ReplicationException e) {
+				LOG.error("Repository Exception:" + e.getMessage());
+			} catch (LoginException e) {
 				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}catch (LoginException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+				LOG.error("Login Exception:" + e.getMessage());
 			}
-		}		
+		}
 	}
-	
-	
+
+	private void getActiavtionProperty(WorkItem workItem, WorkflowSession workflowSession, Session session, String path,
+			Resource resource) {
+		// TODO Auto-generated method stub
+
+		Node node = resource.adaptTo(Node.class);
+		if (null != node) {
+			try {
+				if (node.hasProperty("activationProperty")) {
+					Value activationPropertyValue = node.getProperty("activationProperty").getValue();
+					String activationProperty = activationPropertyValue.toString();
+					replicatePage(workItem, workflowSession, session, path, activationProperty);
+
+				}
+			} catch (RepositoryException e) {
+				// TODO Auto-generated catch block
+				LOG.error("Repository Exception:" + e.getMessage());
+			}
+		}
+	}
+
+	private void replicatePage(WorkItem workItem, WorkflowSession workflowSession, Session session, String path,
+			String activationProperty) {
+		// TODO Auto-generated method stub
+		try {
+			if (null != activationProperty && activationProperty.length() > 0) {
+				replicator.replicate(session, ReplicationActionType.ACTIVATE, path);
+				session.save();
+				session.refresh(true);
+
+			} else {
+				terminateWorkflow(workflowSession, workItem);
+			}
+
+		} catch (ReplicationException e) {
+			// TODO Auto-generated catch block
+			LOG.error("Replication Exception:" + e.getMessage());
+		} catch (WorkflowException e) {
+			// TODO Auto-generated catch block
+			LOG.error("Workflow Exception:" + e.getMessage());
+		} catch (RepositoryException e) {
+			// TODO Auto-generated catch block
+			LOG.error("Repository Exception:" + e.getMessage());
+		}
+
+	}
+
 	/**
 	 * Terminate the workflow
 	 * 
-	 * @param workflowSession the {@link WorkflowSession} from the workflow step
-	 * @param workItem the {@link WorkItem} from the workflow step
-	 * @throws WorkflowException if there was an error terminating the workflow
+	 * @param workflowSession
+	 *            the {@link WorkflowSession} from the workflow step
+	 * @param workItem
+	 *            the {@link WorkItem} from the workflow step
+	 * @throws WorkflowException
+	 *             if there was an error terminating the workflow
 	 */
 	public static void terminateWorkflow(WorkflowSession workflowSession, WorkItem workItem) throws WorkflowException {
 		if (workItem.getWorkflow().isActive()) {
@@ -145,7 +146,8 @@ public class BWIActivationWorkflow implements WorkflowProcess{
 	 * Gets a ResourceResolver from the factory with the given Session
 	 */
 	public ResourceResolver getResourceResolver(Session session) throws LoginException {
-		return resolverFactory.getResourceResolver(Collections.<String, Object>singletonMap(JcrResourceConstants.AUTHENTICATION_INFO_SESSION, session));
+		return resolverFactory.getResourceResolver(
+				Collections.<String, Object>singletonMap(JcrResourceConstants.AUTHENTICATION_INFO_SESSION, session));
 	}
 
 }
